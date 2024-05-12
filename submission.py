@@ -16,41 +16,134 @@ run.py can be used to test your submission.
 """
 
 # List your libraries and modules here. Don't forget to update environment.yml!
+from training import data_prepartion
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
+import numpy as np
 import joblib
 
+def get_last_valid(row):
+    try:
+        last_valid_idx = row.last_valid_index()
+        return row[last_valid_idx]
+    except KeyError:
+        return np.nan
 
-def clean_df(df, background_df=None):
-    """
-    Preprocess the input dataframe to feed the model.
-    # If no cleaning is done (e.g. if all the cleaning is done in a pipeline) leave only the "return df" command
 
-    Parameters:
-    df (pd.DataFrame): The input dataframe containing the raw data (e.g., from PreFer_train_data.csv or PreFer_fake_data.csv).
-    background (pd.DataFrame): Optional input dataframe containing background data (e.g., from PreFer_train_background_data.csv or PreFer_fake_background_data.csv).
+def most_recent(df, cols):
+    sorted_cols = sorted(cols, reverse=False)
+    data = df[sorted_cols]
+    return data.apply(get_last_valid, axis=1)
 
-    Returns:
-    pd.DataFrame: The cleaned dataframe with only the necessary columns and processed variables.
-    """
+def clean_df(raw_df, df_b):
+    # base dataframe
+    df = raw_df[["nomem_encr",
+                 "outcome_available",
+                 "gender_bg",
+                 "age_bg"]].copy()
 
-    ## This script contains a bare minimum working example
-    # Create new variable with age
-    df["age"] = 2024 - df["birthyear_bg"]
+    df["partnership_status"] = most_recent(raw_df, ["partner_2020",
+                                                    "partner_2019",
+                                                    "partner_2018"])
+    df["domestic_situation"] = most_recent(raw_df, ["woonvorm_2020",
+                                                    "woonvorm_2019",
+                                                    "woonvorm_2018"])
+    df["lenght_partnership"] = 2024 - most_recent(raw_df, ["cf20m028",
+                                                           "cf19l028",
+                                                           "cf18k028"])
+    df["age_of_partner"] = 2024 - most_recent(raw_df, ["cf20m026",
+                                                       "cf19l026",
+                                                       "cf18k026"])
+    df["satisf_partnership"] = most_recent(raw_df, ["cf20m180",
+                                                    "cf19l180",
+                                                    "cf18k180"])
+    df["gender_of_partner"] = most_recent(raw_df, ["cf20m032",
+                                                   "cf19l032",
+                                                   "cf18k032"])
 
-    # Imputing missing values in age with the mean
-    df["age"] = df["age"].fillna(df["age"].mean())
+    conditions_f = [
+        (df['gender_bg'] == 1),
+        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 1),
+        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 2),
+        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 4)
+    ]
 
-    # Selecting variables for modelling
-    keepcols = [
-        "nomem_encr",  # ID variable required for predictions,
-        "age"          # newly created variable
-    ] 
+    choices_f = [
+        df['age_bg'],
+        df['age_of_partner'],
+        df['age_of_partner'],
+        np.nan
+    ]
 
-    # Keeping data with variables selected
-    df = df[keepcols]
+    conditions_m = [
+        (df['gender_bg'] == 1),
+        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 1),
+        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 3),
+        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 5)
+    ]
 
-    return df
+    choices_m = [
+        df['age_bg'],
+        df['age_of_partner'],
+        df['age_of_partner'],
+        np.nan
+    ]
+
+    df["age_of_female"] = np.select(conditions_f, choices_f, default=np.nan)
+    df["age_of_male"] = np.select(conditions_m, choices_m, default=np.nan)
+
+    df["hh_net_income"] = most_recent(raw_df, ["nettohh_f_2020",
+                                               "nettohh_f_2019",
+                                               "nettohh_f_2018"])
+    df["fertility_intentions"] = most_recent(raw_df, ["cf20m128",
+                                                      "cf19l128",
+                                                      "cf18k128"])
+    df["parity"] = most_recent(raw_df, ["cf20m455",
+                                        "cf19l455",
+                                        "cf18k455"])
+    df["high_edu_level"] = most_recent(raw_df, ["oplcat_2020",
+                                                "oplcat_2019",
+                                                "oplcat_2018"])
+    raw_df["child_soon_2020"] = np.nan
+    raw_df.loc[(raw_df["cf20m130"] <= 5), "child_soon_2020"] = 1
+    raw_df.loc[(raw_df["cf20m130"] > 5), "child_soon_2020"] = 0
+    raw_df["child_soon_2019"] = np.nan
+    raw_df.loc[(raw_df["cf19l130"] <= 6), "child_soon_2019"] = 1
+    raw_df.loc[(raw_df["cf19l130"] > 6), "child_soon_2019"] = 0
+    raw_df["child_soon_2018"] = np.nan
+    raw_df.loc[(raw_df["cf18k130"] <= 7), "child_soon_2018"] = 1
+    raw_df.loc[(raw_df["cf18k130"] > 7), "child_soon_2018"] = 0
+    df["child_soon"] = most_recent(raw_df, ["child_soon_2020",
+                                            "child_soon_2019",
+                                            "child_soon_2018"])
+    df_b[["nomem_encr", "wave", "aantalki"]]
+    wide_b = df_b.pivot(index='nomem_encr', columns='wave', values='aantalki').loc[:, 201801:]
+    wide_b["n_children_in_hh"] = wide_b.apply(get_last_valid, axis=1)
+    wide_b.reset_index(inplace=True)
+    wide_b = wide_b[["nomem_encr", "n_children_in_hh"]]
+    merged_df = pd.merge(df, wide_b, on='nomem_encr')
+
+    return merged_df
+
+
+def data_prepartion(X_var, outcome=None):
+    vars_model = ["nomem_encr", "gender_bg", "age_bg", "partnership_status", "domestic_situation", 'hh_net_income', "fertility_intentions", "high_edu_level", 'n_children_in_hh']
+    var_cate = ["gender_bg", "partnership_status", "domestic_situation", "fertility_intentions", "high_edu_level"]
+
+    X = X_var[vars_model]
+    X=X.dropna(how='any')
+
+    X[var_cate] = X[var_cate].astype('int').astype("category")
+
+
+    if isinstance(outcome, pd.DataFrame):
+        y = outcome[outcome["nomem_encr"].isin(X["nomem_encr"])][["nomem_encr", "new_child"]]
+        y["new_child"] = y["new_child"].astype('int')
+        y = y.drop(columns="nomem_encr")
+
+        return X, y
+    else:
+
+        return X
 
 
 def predict_outcomes(df, background_df=None, model_path="model.joblib"):
@@ -85,15 +178,16 @@ def predict_outcomes(df, background_df=None, model_path="model.joblib"):
     df = clean_df(df, background_df)
 
     # Exclude the variable nomem_encr if this variable is NOT in your model
-    vars_without_id = df.columns[df.columns != 'nomem_encr']
+    X = data_prepartion(df)
 
     # Generate predictions from model, should be 0 (no child) or 1 (had child)
-    predictions = model.predict(df[vars_without_id])
+    predictions = model.predict(X.drop(columns="nomem_encr"))
 
     # Output file should be DataFrame with two columns, nomem_encr and predictions
     df_predict = pd.DataFrame(
-        {"nomem_encr": df["nomem_encr"], "prediction": predictions}
+        {"nomem_encr": X["nomem_encr"], "prediction": predictions}
     )
 
     # Return only dataset with predictions and identifier
     return df_predict
+
