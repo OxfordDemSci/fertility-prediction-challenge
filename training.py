@@ -60,8 +60,6 @@ def train_save_model(cleaned_df, outcome_df):
     model = GradientBoostingClassifier(learning_rate=0.001, n_estimators=1800,max_depth=4, min_samples_split=2, min_samples_leaf=1, subsample=1,max_features='sqrt', random_state=1080126904)
     model.fit(X_train, y_train)
 
-    # Fit the model
-    model.fit(X_train, y_train)
 
     # Save the model
     joblib.dump(model, "model.joblib")
