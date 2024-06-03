@@ -16,130 +16,79 @@ run.py can be used to test your submission.
 """
 
 # List your libraries and modules here. Don't forget to update environment.yml!
-from training import data_prepartion
+from training import clean_df
 import pandas as pd
 import numpy as np
 import joblib
 
-def get_last_valid(row):
-    try:
-        last_valid_idx = row.last_valid_index()
-        return row[last_valid_idx]
-    except KeyError:
-        return np.nan
-
-
-def most_recent(df, cols):
-    sorted_cols = sorted(cols, reverse=False)
-    data = df[sorted_cols]
-    return data.apply(get_last_valid, axis=1)
-
-def clean_df(raw_df, df_b):
-    # base dataframe
-    df = raw_df[["nomem_encr",
-                 "outcome_available",
-                 "gender_bg",
-                 "age_bg"]].copy()
-
-    df["partnership_status"] = most_recent(raw_df, ["partner_2020",
-                                                    "partner_2019",
-                                                    "partner_2018"])
-    df["domestic_situation"] = most_recent(raw_df, ["woonvorm_2020",
-                                                    "woonvorm_2019",
-                                                    "woonvorm_2018"])
-    df["lenght_partnership"] = 2024 - most_recent(raw_df, ["cf20m028",
-                                                           "cf19l028",
-                                                           "cf18k028"])
-    df["age_of_partner"] = 2024 - most_recent(raw_df, ["cf20m026",
-                                                       "cf19l026",
-                                                       "cf18k026"])
-    df["satisf_partnership"] = most_recent(raw_df, ["cf20m180",
-                                                    "cf19l180",
-                                                    "cf18k180"])
-    df["gender_of_partner"] = most_recent(raw_df, ["cf20m032",
-                                                   "cf19l032",
-                                                   "cf18k032"])
-
-    conditions_f = [
-        (df['gender_bg'] == 1),
-        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 1),
-        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 2),
-        (df['gender_bg'] == 1) & (df['gender_of_partner'] == 4)
-    ]
-
-    choices_f = [
-        df['age_bg'],
-        df['age_of_partner'],
-        df['age_of_partner'],
-        np.nan
-    ]
-
-    conditions_m = [
-        (df['gender_bg'] == 1),
-        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 1),
-        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 3),
-        (df['gender_bg'] == 2) & (df['gender_of_partner'] == 5)
-    ]
-
-    choices_m = [
-        df['age_bg'],
-        df['age_of_partner'],
-        df['age_of_partner'],
-        np.nan
-    ]
-
-    df["age_of_female"] = np.select(conditions_f, choices_f, default=np.nan)
-    df["age_of_male"] = np.select(conditions_m, choices_m, default=np.nan)
-
-    df["hh_net_income"] = most_recent(raw_df, ["nettohh_f_2020",
-                                               "nettohh_f_2019",
-                                               "nettohh_f_2018"])
-    df["fertility_intentions"] = most_recent(raw_df, ["cf20m128",
-                                                      "cf19l128",
-                                                      "cf18k128"])
-    df["parity"] = most_recent(raw_df, ["cf20m455",
-                                        "cf19l455",
-                                        "cf18k455"])
-    df["high_edu_level"] = most_recent(raw_df, ["oplcat_2020",
-                                                "oplcat_2019",
-                                                "oplcat_2018"])
-    raw_df["child_soon_2020"] = np.nan
-    raw_df.loc[(raw_df["cf20m130"] <= 5), "child_soon_2020"] = 1
-    raw_df.loc[(raw_df["cf20m130"] > 5), "child_soon_2020"] = 0
-    raw_df["child_soon_2019"] = np.nan
-    raw_df.loc[(raw_df["cf19l130"] <= 6), "child_soon_2019"] = 1
-    raw_df.loc[(raw_df["cf19l130"] > 6), "child_soon_2019"] = 0
-    raw_df["child_soon_2018"] = np.nan
-    raw_df.loc[(raw_df["cf18k130"] <= 7), "child_soon_2018"] = 1
-    raw_df.loc[(raw_df["cf18k130"] > 7), "child_soon_2018"] = 0
-    df["child_soon"] = most_recent(raw_df, ["child_soon_2020",
-                                            "child_soon_2019",
-                                            "child_soon_2018"])
-    df_b[["nomem_encr", "wave", "aantalki"]]
-    wide_b = df_b.pivot(index='nomem_encr', columns='wave', values='aantalki').loc[:, 201801:]
-    wide_b["n_children_in_hh"] = wide_b.apply(get_last_valid, axis=1)
-    wide_b.reset_index(inplace=True)
-    wide_b = wide_b[["nomem_encr", "n_children_in_hh"]]
-    merged_df = pd.merge(df, wide_b, on='nomem_encr')
-
-    return merged_df
-
 
 def data_prepartion(X_var, outcome=None):
-    vars_model = ["nomem_encr", "gender_bg", "age_bg", "partnership_status", "domestic_situation", 'hh_net_income', "fertility_intentions", "high_edu_level", 'n_children_in_hh']
-    var_cate = ["gender_bg", "partnership_status", "domestic_situation", "fertility_intentions", "high_edu_level"]
+
+
+    vars_model = ["nomem_encr", 'gender_bg', 'age_bg',
+                  'partnership_status', 'domestic_situation', 'lenght_partnership',
+                  'satisf_partnership',
+                  'age_of_female', 'age_of_male', 'hh_net_income', 'fertility_intentions',
+                  'parity', 'high_edu_level', 'child_soon', 'n_children_in_hh', 'fert_int_index_5y', 'hh_income_sd_5y',
+                  'stability_hh_5y', 'personal_income_2020', 'dutch', 'non_wstrn_1gen',
+                  'non_wstrn_2gen', 'wstrn_1gen', 'wstrn_2gen', 'sted', 'cost-free',
+                  'rental', 'self-owned', 'weight', 'height', 'bmi', 'len_partnership',
+                  'satis_partnership', 'irregular_work', 'ends_meet', 'religion_they_1.0',
+                  'religion_they_2.0', 'religion_they_3.0', 'religion_they_4.0',
+                  'religion_they_5.0', 'religion_they_6.0', 'religion_they_7.0',
+                  'religion_they_8.0', 'religion_they_9.0', 'religion_they_10.0',
+                  'religion_they_11.0', 'religion_they_12.0', 'religion_they_13.0',
+                  'religion_they_14.0', 'religious', 'religion_you_1.0',
+                  'religion_you_2.0', 'religion_you_3.0', 'religion_you_4.0',
+                  'religion_you_5.0', 'religion_you_6.0', 'religion_you_7.0',
+                  'religion_you_8.0', 'religion_you_9.0', 'religion_you_10.0',
+                  'religion_you_11.0', 'religion_you_12.0', 'religion_you_13.0',
+                  'religion_you_14.0', 'freq_see_father', 'freq_see_mother', 'life_satis',
+                  'satis_relationship', 'satis_family_life', 'satis_house',
+                  'satis_financial', 'satis_contacts', 'perc_health', 'long_disease',
+                  'hinder', 'nettocat_clean']
+    var_cate = ["gender_bg", "partnership_status", "domestic_situation", "satisf_partnership"
+        , "fertility_intentions", "high_edu_level", "n_children_in_hh"]
+
+    # Check which columns are missing
+    missing_columns = [col for col in vars_model if col not in X_var.columns]
+
+    # Add missing columns to the DataFrame and fill them with zeros
+    for col in missing_columns:
+        X_var[col] = 0
+
+    imputed_media_median = X_var[['gender_bg', 'age_bg',
+                                  'partnership_status', 'domestic_situation', 'lenght_partnership',
+                                  'satisf_partnership',
+                                  'age_of_female', 'age_of_male', 'hh_net_income', 'fertility_intentions',
+                                  'parity', 'high_edu_level', 'child_soon', 'n_children_in_hh', 'fert_int_index_5y', 'hh_income_sd_5y',
+                                  'stability_hh_5y', 'personal_income_2020', 'dutch', 'non_wstrn_1gen',
+                                  'non_wstrn_2gen', 'wstrn_1gen', 'wstrn_2gen', 'sted', 'cost-free',
+                                  'rental', 'self-owned', 'weight', 'height', 'bmi', 'len_partnership',
+                                  'satis_partnership', 'irregular_work', 'ends_meet', 'religion_they_1.0',
+                                  'religion_they_2.0', 'religion_they_3.0', 'religion_they_4.0',
+                                  'religion_they_5.0', 'religion_they_6.0', 'religion_they_7.0',
+                                  'religion_they_8.0', 'religion_they_9.0', 'religion_they_10.0',
+                                  'religion_they_11.0', 'religion_they_12.0', 'religion_they_13.0',
+                                  'religion_they_14.0', 'religious', 'religion_you_1.0',
+                                  'religion_you_2.0', 'religion_you_3.0', 'religion_you_4.0',
+                                  'religion_you_5.0', 'religion_you_6.0', 'religion_you_7.0',
+                                  'religion_you_8.0', 'religion_you_9.0', 'religion_you_10.0',
+                                  'religion_you_11.0', 'religion_you_12.0', 'religion_you_13.0',
+                                  'religion_you_14.0', 'freq_see_father', 'freq_see_mother', 'life_satis',
+                                  'satis_relationship', 'satis_family_life', 'satis_house',
+                                  'satis_financial', 'satis_contacts', 'perc_health', 'long_disease',
+                                  'hinder', 'nettocat_clean']].median()
 
     X = X_var[vars_model]
-    X=X.dropna(how='any')
-
+    X[vars_model] = X[vars_model].fillna(imputed_media_median)
+    # X=X.dropna(how='any')
     X[var_cate] = X[var_cate].astype('int').astype("category")
-
 
     if isinstance(outcome, pd.DataFrame):
         y = outcome[outcome["nomem_encr"].isin(X["nomem_encr"])][["nomem_encr", "new_child"]]
         y["new_child"] = y["new_child"].astype('int')
         y = y.drop(columns="nomem_encr")
-
         return X, y
     else:
 
@@ -190,4 +139,6 @@ def predict_outcomes(df, background_df=None, model_path="model.joblib"):
 
     # Return only dataset with predictions and identifier
     return df_predict
+
+
 
